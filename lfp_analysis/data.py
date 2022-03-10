@@ -237,18 +237,21 @@ class SignalBundle:
     def __init__(
         self,
         data: np.ndarray,
-        names: Optional[list[str]] = None,
+        names: Optional[list[str]] = [],
         fs: float = 2048.0,
         highpassed: bool = False,
-        decimated: bool = True,
+        decimated: bool = False,
     ) -> None:
         self.names = names
 
-        if len(data.shape) != 2:  # Check whether data has appropriate dimensions:
-            raise ValueError(
-                f"data must be a 2-dimensional array (n_channels x n_samples), instead {len(data.shape)}-dim data was provided"
-            )
-        self.data = data if data.shape[1] > data.shape[0] else data.T
+        if data.size == 0:
+            self.data = data
+        else:
+            if len(data.shape) != 2:  # Check whether data has appropriate dimensions:
+                raise ValueError(
+                    f"data must be a 2-dimensional array (n_channels x n_samples), instead {len(data.shape)}-dim data was provided"
+                )
+            self.data = data if data.shape[1] > data.shape[0] else data.T
 
         self.n_chan = data.shape[0]
         self.fs = float(fs)
@@ -265,6 +268,9 @@ class SignalBundle:
         return dedent(reprStr)
 
     def highpass(self, cutoff_freq: float = 0.5):
+
+        if not self.data.size>0:
+            return self
         if self.highpassed:
             raise Warning(
                 "Flag indicates that data has already been highpassed -- proceeding to highpass again."
@@ -348,6 +354,15 @@ class SignalBundle:
 
     def t(self):
         return np.linspace(0, self.data.shape[-1] / self.fs, self.data.shape[-1])
+
+    def notch(self,**kwargs):
+
+        if not self.data.size>0:
+            return self
+        
+        self.data = notch_filter_data(self.data,**kwargs)
+
+        return self
 
     def plot(
         self,

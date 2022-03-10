@@ -3,7 +3,7 @@ import pandas as pd
 import yaml
 from itertools import chain
 from copy import deepcopy
-import fcntl
+#import fcntl
 
 from collections import OrderedDict
 
@@ -36,9 +36,9 @@ class DatasetScores:
 
     def dump(self, path):
         with open(path, "w+") as fp:
-            fcntl.flock(fp, fcntl.LOCK_EX)
+            #fcntl.flock(fp, fcntl.LOCK_EX)
             yaml.dump(dict(self.scores), fp)
-            fcntl.flock(fp, fcntl.LOCK_UN)
+            #fcntl.flock(fp, fcntl.LOCK_UN)
 
     def __getitem__(self, *keys):
 
@@ -85,7 +85,7 @@ class DatasetScores:
 
 class ClsCompare:
 
-    scores: OrderedDict["str", DatasetScores]
+    scores: OrderedDict["str", "DatasetScores"]
 
     def __init__(self, scores, key):
         self.scores = OrderedDict([(key, scores)])
