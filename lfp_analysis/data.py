@@ -222,6 +222,9 @@ class SmrImporter:
         self.fs = analog_signal.sampling_rate.magnitude
 
         self.data = analog_signal.magnitude.T
+        
+    def t(self):
+        return np.linspace(0,(self.data.shape[-1]-1.0)/self.fs,self.data.shape[-1])
 
     def free(self):
         if hasattr(self, "data"):
