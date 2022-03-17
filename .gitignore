@@ -1,26 +1,4 @@
 *.pyc 
-**/__pycache__/*.cpython-39.pyc
 **/*.cpython-39.pyc
 *.egg-info/
-/* lfp_analysis/egg-info/ */
-/* lfp_analysis.egg-info/ */
 **/__pycache__/**
-__pycache__/
-*.py[cod]
-*$py.class
-lfp_analysis/arch/__pycache__/__init__.cpython-39.pyc
-lfp_analysis/arch/__pycache__/base.cpython-39.pyc
-lfp_analysis/arch/__pycache__/dense.cpython-39.pyc
-lfp_analysis/arch/__pycache__/resnet1d.cpython-39.pyc
-lfp_analysis/arch/__pycache__/sinc.cpython-39.pyc
-lfp_analysis/__pycache__/__init__.cpython-39.pyc
-lfp_analysis/__pycache__/_manual_data.cpython-39.pyc
-lfp_analysis/__pycache__/data.cpython-39.pyc
-lfp_analysis/__pycache__/dataloader.cpython-39.pyc
-lfp_analysis/__pycache__/feature_extractor.cpython-39.pyc
-lfp_analysis/__pycache__/report.cpython-39.pyc
-lfp_analysis/__pycache__/score.cpython-39.pyc
-lfp_analysis/__pycache__/svm.cpython-39.pyc
-lfp_analysis/__pycache__/trainer_pl.cpython-39.pyc
-lfp_analysis/__pycache__/trainer.cpython-39.pyc
-lfp_analysis/__pycache__/windower.cpython-39.pyc
