@@ -80,7 +80,9 @@ class BLClassifier:
     ):
 
         if extract_method == "periodogram":
-            self.extractor = SignalFeatureExtractor(method="periodogram", fs=fs)
+            self.extractor = SignalFeatureExtractor(
+                method="periodogram", fs=fs, avoid_line_noise=False
+            )
         elif extract_method == "hilbert":
             self.extractor == SignalFeatureExtractor(method="hilbert", fs=fs)
         elif extract_method == "TF":

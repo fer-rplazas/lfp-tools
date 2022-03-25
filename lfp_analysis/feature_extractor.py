@@ -113,7 +113,7 @@ def fill_feat_mat(feat_mat, win_id, Pxx, n_chan, freq_idx):
 
 def periodogram_extractor(feat_mat, data, freq_ranges, fs=2048.0):
 
-    f, _ = periodogram(np.random.rand((data.shape[2])), fs=2048.0, window=None)
+    f, _ = periodogram(np.random.rand((data.shape[2])), fs=fs)
 
     freq_idx = np.zeros_like(np.array(freq_ranges))
     for jj, freq_range in enumerate(freq_ranges):
@@ -125,7 +125,6 @@ def periodogram_extractor(feat_mat, data, freq_ranges, fs=2048.0):
         f, Pxx = periodogram(
             this_data,
             fs=fs,
-            window=None,
         )
         feat_mat = fill_feat_mat(feat_mat, ii, Pxx, data.shape[1], freq_idx)
 
