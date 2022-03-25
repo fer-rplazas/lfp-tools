@@ -70,7 +70,7 @@ class LFPDataLoader:
         pat_id: Optional[int] = None,
         task_id: Optional[int] = None,
         stim_id: Optional[int] = None,
-        use_power_transform: bool = True,
+        use_power_transform: bool = False,
         train_idx: np.ndarray = None,
         device=[0],
     ):

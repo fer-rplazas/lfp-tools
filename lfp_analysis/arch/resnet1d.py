@@ -69,6 +69,7 @@ class ResNetMini(nn.Module):
                         c_in=self.hparams.c_hidden[
                             block_idx if not subsample else (block_idx - 1)
                         ],
+                        c_out=self.hparams.c_hidden[block_idx],
                         act_fn=self.hparams.act_fn,
                         kernel_size=self.hparams.ks,
                     )
