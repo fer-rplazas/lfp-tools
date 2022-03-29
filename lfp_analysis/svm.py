@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -189,8 +190,9 @@ class BLClassifier:
 
         # Train & Score SVMs:
         if self.cls_method == "SVM":
-            self.cls = SVC(class_weight="balanced").fit(X_train_bal, y_train_bal)
-
+            self.cls = SVC(class_weight="balanced")#.fit(X_train_bal, y_train_bal)
+            params = {'C':[0.1,1,10,100]}
+            self.cls = RandomizedSearchCV(self.cls,params,n_iter=4).fit(X_train_bal, y_train_bal)
             def get_losses(X):
                 return None
 
