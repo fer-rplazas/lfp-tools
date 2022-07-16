@@ -148,7 +148,8 @@ class Windower:
                 self.df[self.df["is_valid"] == 1]["id_end"].iloc[-1],
             )
             self.train_idx = np.setdiff1d(
-                np.arange(t_data.shape[-1]), np.arange(self.valid_idx[0], self.valid_idx[1] + 1)
+                np.arange(t_data.shape[-1]),
+                np.arange(self.valid_idx[0], self.valid_idx[1] + 1),
             )
         else:
             self.train_idx = np.arange(t_data.shape[-1])
@@ -222,3 +223,84 @@ class Windower:
         new_windower.df = pd.concat((self.df, other.df), ignore_index=True)
 
         return new_windower
+
+class WindowerSeq:
+    def __init__(
+        self,
+        label: np.ndarray,
+        data_len: int,
+        fs_label: float = 2048.0,
+        fs_data: float = 2048.0,
+        win_len_sec: float = 0.25,
+        seq_len: int = 8,
+        n_folds: int = 5,
+        fold_id: Optional[int] = 4,
+        perc_overlap=0.0,
+    ):
+
+        self.label, self.fs_label = np.squeeze(label), fs_label
+        self.data_len, self.fs_data = data_len, fs_data
+
+        self.win_len_sec, self.seq_len = win_len_sec, seq_len
+
+        self.n_folds, self.fold_id = n_folds, fold_id
+
+        self.windower_ = Windower(
+            self.label,
+            self.data_len,
+            self.fs_label,
+            self.fs_data,
+            self.win_len_sec,
+            perc_overlap,
+            self.n_folds,
+            self.fold_id,
+        )
+
+        self.window()
+
+    def __repr__(self):
+        return self.windower_.__repr__()
+
+    def window(self):
+
+        self.windower_.window()
+
+        idx_cont, idx_wind_cont = [], []
+        label_cont = []
+        is_valid_cont = []
+        t_cont = []
+
+        for jj in range(0,len(self.windower_.df) - self.seq_len,5):
+            row = self.windower_.df.iloc[jj]
+            # Check whether
+            if row["is_valid"] != self.windower_.df.iloc[jj + self.seq_len]["is_valid"]:
+                continue
+            else:
+                idx_int, label_int, idx_wind_int = [], [], []
+                for kk in range(self.seq_len):
+                    idx_int.append(
+                        (
+                            int(self.windower_.df.iloc[jj + kk]["id_start"]),
+                            int(self.windower_.df.iloc[jj + kk]["id_end"]),
+                        )
+                    )
+                    idx_wind_int.append(self.windower_.df.iloc[jj + kk].name)
+                    label_int.append(int(self.windower_.df.iloc[jj + kk]["label"]))
+
+                idx_cont.append(idx_int)
+                idx_wind_cont.append(idx_wind_int)
+                label_cont.append(label_int)
+                is_valid_cont.append(
+                    self.windower_.df.iloc[jj + kk]["is_valid"].astype(int)
+                )
+                t_cont.append(self.windower_.df.iloc[jj + kk]["t"])
+
+        self.df = pd.DataFrame(
+            {
+                "idx": idx_cont,
+                "idx_win": idx_wind_cont,
+                "label": label_cont,
+                "is_valid": is_valid_cont,
+                "t": t_cont,
+            }
+        )

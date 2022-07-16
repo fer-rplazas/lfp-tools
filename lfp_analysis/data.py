@@ -26,7 +26,7 @@ if os.path.split(os.path.split(os.getcwd())[0])[1] == "lfp_analysis":
     # Use absolute path for hydra
     DATA_PATH = Path("/home/fernando/OneDrive/DPhil/DL Decoding/lfp_analysis/data")
 else:
-    DATA_PATH = Path("./../../../../data")
+    DATA_PATH = Path("./../../data")
 
 
 class PatID(Enum):
@@ -153,6 +153,7 @@ class Dataset:
         notch_filter: bool = False,
     ):
 
+        to_drop = None
         if (
             drop_chans
         ):  # Drop channels to consolidate channel config across stim ON and OFF.
@@ -167,7 +168,7 @@ class Dataset:
             self.LFP.data = notch_filter_data(self.LFP.data, freq=100)
             self.LFP.data = notch_filter_data(self.LFP.data, freq=200)
 
-        if decimate_on_import:
+        if decimate_on_import is not None:
             self.LFP.decimate(decimate_on_import)
 
         self.load_label()
@@ -222,9 +223,11 @@ class SmrImporter:
         self.fs = analog_signal.sampling_rate.magnitude
 
         self.data = analog_signal.magnitude.T
-        
+
     def t(self):
-        return np.linspace(0,(self.data.shape[-1]-1.0)/self.fs,self.data.shape[-1])
+        return np.linspace(
+            0, (self.data.shape[-1] - 1.0) / self.fs, self.data.shape[-1]
+        )
 
     def free(self):
         if hasattr(self, "data"):
@@ -272,7 +275,7 @@ class SignalBundle:
 
     def highpass(self, cutoff_freq: float = 0.5):
 
-        if not self.data.size>0:
+        if not self.data.size > 0:
             return self
         if self.highpassed:
             raise Warning(
@@ -358,12 +361,12 @@ class SignalBundle:
     def t(self):
         return np.linspace(0, self.data.shape[-1] / self.fs, self.data.shape[-1])
 
-    def notch(self,**kwargs):
+    def notch(self, **kwargs):
 
-        if not self.data.size>0:
+        if not self.data.size > 0:
             return self
-        
-        self.data = notch_filter_data(self.data,**kwargs)
+
+        self.data = notch_filter_data(self.data, **kwargs)
 
         return self
 

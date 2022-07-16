@@ -3,6 +3,8 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 
+import numpy as np
+
 # from torchaudio.transforms import Resample
 
 import pytorch_lightning as pl
@@ -20,12 +22,15 @@ from functools import partial
 from copy import deepcopy
 from scipy.signal import decimate
 
+from typing import Optional
+
 import wandb
 
 from .arch import *
 
 from lfp_analysis.data import PatID, Task, Stim
 from lfp_analysis.score import metrics
+from lfp_analysis.svm import window_data
 
 DEFAULT_DEVICE = (
     torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
@@ -37,6 +42,224 @@ os.makedirs(CHECKPOINT_PATH, exist_ok=True)
 import torch.multiprocessing
 
 torch.multiprocessing.set_sharing_strategy("file_system")
+
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader, random_split
+
+
+class DataModule(pl.LightningDataModule):
+    def __init__(self, signals: np.ndarray, windower, feature_extractor, bs=32):
+
+        super().__init__()
+
+        self.signals, self.windower, self.feature_extractor = (
+            signals,
+            windower,
+            feature_extractor,
+        )
+        self.bs = bs
+
+    def setup(self, stage: Optional[str] = None):
+
+        # Window data, extract features:
+        self.windowed = window_data(
+            self.signals,
+            self.windower.windower_.df.id_start.values,
+            self.windower.windower_.df.id_end.values,
+        )
+        self.features = self.feature_extractor(self.windowed)
+        self.features = (
+            self.features - self.features.mean(axis=0, keepdims=True)
+        ) / self.features.std(axis=0, keepdims=True)
+
+        self.data = torch.tensor(self.windowed).float()
+
+        self.train_data = []
+        for jj, row in self.windower.df[
+            self.windower.df["is_valid"] == False
+        ].iterrows():
+            x = torch.stack([self.data[jj] for jj in row["idx_win"]])
+            y = [
+                (label, torch.tensor(self.features[jj]).float())
+                for label, jj in zip(row["label"], row["idx_win"])
+            ]
+            self.train_data.append((x, y))
+
+        self.valid_data = []
+        for jj, row in self.windower.df[
+            self.windower.df["is_valid"] == True
+        ].iterrows():
+            x = torch.stack([self.data[jj] for jj in row["idx_win"]])
+            y = [
+                (label, torch.tensor(self.features[jj]).float())
+                for label, jj in zip(row["label"], row["idx_win"])
+            ]
+            self.valid_data.append((x, y))
+
+    def train_dataloader(self):
+        return DataLoader(self.train_data, batch_size=self.bs, shuffle=True)
+
+    def valid_dataloader(self):
+        return DataLoader(self.valid_data, batch_size=self.bs, shuffle=False)
+
+
+class ARModule(pl.LightningModule):
+    def __init__(
+        self,
+        model_name,
+        model_hparams,
+        optimizer_name,
+        optimizer_hparams,
+        use_mixup=True,
+        w_losses: list[int] = [0.5, 0.5],
+    ):
+
+        super().__init__()
+
+        self.save_hyperparameters()
+
+        self.model = create_model(model_name, model_hparams)
+
+        self.l_cat = nn.BCEWithLogitsLoss()
+        self.l_regress = nn.MSELoss()
+        self.w_losses = w_losses
+
+        # self.example_input_array = torch.zeros((1,model_hparams['convs_hparams']['n_in'],1535), dtype=torch.float32)
+        # import pdb; pdb.set_trace()
+        # self.model_summary = summary(self.model, self.example_input_array)
+
+        self.metrics = metrics
+        self.use_mixup = use_mixup
+
+    def configure_optimizers(self):
+
+        if self.hparams.optimizer_name == "Adam":
+            optimizer = optim.AdamW(self.parameters(), **self.hparams.optimizer_hparams)
+        elif self.hparams.optimizer_name == "SGD":
+            optimizer = optim.SGD(self.parameters(), **self.hparams.optimizer_hparams)
+        else:
+            raise ValueError(f'Unknown optimizer: "{self.hparams.optimizer_name}"')
+
+        # We will reduce the learning rate by 0.1 after 100 and 150 epochs
+        # scheduler = optim.lr_scheduler.OneCycleLR(
+        #     optimizer,
+        #     max_lr=5e-4,
+        #     steps_per_epoch=2,
+        #     epochs=180,
+        # )
+        scheduler = optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=[50, 80], gamma=0.1
+        )
+        return [optimizer], [scheduler]
+
+    def training_step(self, batch, batch_idx):
+
+        x, labels = batch
+
+        cats = torch.cat([lab[0] for lab in labels]).float()
+        feats = torch.stack([lab[1] for lab in labels]).view(-1, labels[0][1].shape[-1])
+
+        l1, l2 = self.model(x)
+
+        if self.use_mixup:
+
+            if l1.shape[0] % 2 != 0:
+                l1 = l1[:-1, ...]
+                l2 = l2[:-1, ...]
+
+                cats = cats[:-1, ...]
+                feats = feats[:-1, ...]
+
+            n = l1.shape[0] // 2
+            lambdas = torch.rand(n).to(x.device)
+
+            # import pdb; pdb.set_trace()
+            l1_interp = lambdas * l1[:n, ...] + (1 - lambdas) * l1[n:, ...]
+            l2_interp = (
+                lambdas.unsqueeze(1).expand(-1, feats.shape[-1]) * l2[:n, ...]
+                + (1 - lambdas.unsqueeze(1).expand(-1, feats.shape[-1])) * l2[n:, ...]
+            )
+
+            cats_interp = lambdas * cats[:n] + (1 - lambdas) * cats[n:]
+            feats_interp = (
+                lambdas.unsqueeze(1).expand(-1, feats.shape[-1]) * feats[:n, ...]
+                + (1 - lambdas.unsqueeze(1).expand(-1, feats.shape[-1]))
+                * feats[n:, ...]
+            )
+
+            l1, l2 = l1_interp, l2_interp
+            cats, feats = cats_interp, feats_interp
+
+        cat_loss = self.l_cat(l1, cats)
+        regress_loss = self.l_regress(l2, feats)
+        loss = self.w_losses[0] * cat_loss + self.w_losses[1] * regress_loss
+
+        for k, score_fun in metrics.items():
+            self.log(
+                f"train/{k}",
+                float(
+                    score_fun(
+                        cats.int(), (torch.sigmoid(l1) > 0.5).int(), torch.sigmoid(l1)
+                    )
+                ),
+                on_step=False,
+                on_epoch=True,
+            )
+
+        self.log("train/loss", loss.item())
+        self.log("train/class_loss", cat_loss.item())
+        self.log("train/feats_loss", regress_loss.item())
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+
+        x, labels = batch
+
+        cats = torch.cat([lab[0] for lab in labels]).float()
+        feats = torch.stack([lab[1] for lab in labels]).view(-1, labels[0][1].shape[-1])
+
+        l1, l2 = self.model(x)
+
+        cat_loss = self.l_cat(l1, cats)
+        regress_loss = self.l_regress(l2, feats)
+        loss = self.w_losses[0] * cat_loss + self.w_losses[1] * regress_loss
+
+        # for k, score_fun in metrics.items():
+        #     self.log(
+        #         f"valid/{k}",
+        #         float(
+        #             score_fun(
+        #                 cats.int(), (torch.sigmoid(l1) > 0.5).int(), torch.sigmoid(l1)
+        #             )
+        #         ),
+        #         on_step=False,
+        #         on_epoch=True,
+        #     )
+
+        self.log("valid/loss", loss.item())
+        self.log("valid/class_loss", cat_loss.item())
+        self.log("valid/feats_loss", regress_loss.item())
+
+        return cats.int(), (torch.sigmoid(l1) > 0.5).int(), torch.sigmoid(l1)
+
+    def validation_epoch_end(self, val_outputs):
+
+        labels, preds, scores = [], [], []
+        for item in val_outputs:
+            labels.append(item[0])
+            preds.append(item[1])
+            scores.append(item[2])
+
+        labels, preds, scores = tuple(
+            map(lambda x: torch.cat(x, 0), (labels, preds, scores))
+        )
+
+        for k, score_fun in self.metrics.items():
+            self.log(
+                f"valid/{k}",
+                float(score_fun(labels, preds, scores)),
+            )
 
 
 class LFPModule(pl.LightningModule):
@@ -434,6 +657,9 @@ class TrainerPL:
             self.logger.name if hasattr(self.logger, "name") else self.model_name
         )
 
+        if self.save_name is None:
+            self.save_name = "model"
+
         trainer = pl.Trainer(
             stochastic_weight_avg=False,
             # gradient_clip_val=2.0,
@@ -453,7 +679,6 @@ class TrainerPL:
                     monitor="valid/bal_acc",
                     save_top_k=1,
                 ),  # Save the best checkpoint based on the maximum val_acc recorded. Saves only weights and not optimizer
-                LearningRateMonitor("epoch"),
             ],  # Log learning rate every epoch
         )  # In case your notebook crashes due to the progress bar, consider increasing the refresh rate
 
@@ -512,7 +737,7 @@ class TrainerPL:
 
         # Test best model on validation and test set
         val_result = self.trainer.validate(
-            self.model, val_dataloaders=self.valid_loader, verbose=False
+            self.model, dataloaders=self.valid_loader, verbose=False
         )
 
     def score(self, dataloader=None):

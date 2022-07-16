@@ -22,9 +22,9 @@ metrics = {
     "acc": lambda labels, preds, scores: torchmetrics.functional.accuracy(
         preds, labels
     ),
-    "auc": lambda labels, preds, scores: partial(
-        torchmetrics.functional.auroc, num_classes=2
-    )(scores, labels),
+    # "auc": lambda labels, preds, scores: partial(
+    #     torchmetrics.functional.auroc, num_classes=2
+    # )(scores, labels),
     "mcc": lambda labels, preds, scores: 0.0
     if partial(torchmetrics.functional.matthews_corrcoef, num_classes=2)(
         preds, labels

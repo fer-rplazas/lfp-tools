@@ -52,6 +52,8 @@ def rebalance_data(X, y):
 
 @njit
 def window_data(data, idx_start, idx_end):
+    """Turns data of shape (n_chans, n_samples) into data of shape (n_windows, n_chans, n_samples_per_window)
+    """
 
     assert np.all(
         (idx_end - idx_start) == idx_end[0] - idx_start[0]
@@ -78,16 +80,18 @@ class BLClassifier:
         fs: float = 2048.0,
         extract_method: str = "periodogram",
         select_band=None,
+        avoid_line_noise=False,
     ):
 
         if extract_method == "periodogram":
             self.extractor = SignalFeatureExtractor(
-                method="periodogram", fs=fs, avoid_line_noise=False
+                method="periodogram", fs=fs, avoid_line_noise=avoid_line_noise
             )
+
         elif extract_method == "hilbert":
-            self.extractor == SignalFeatureExtractor(method="hilbert", fs=fs)
+            self.extractor = SignalFeatureExtractor(method="hilbert", fs=fs)
         elif extract_method == "TF":
-            self.extractor == TfFeatureExtractor()
+            self.extractor = TfFeatureExtractor()
         else:
             raise ValueError("extract_method not recognized")
 
@@ -154,8 +158,8 @@ class BLClassifier:
     def cross_task(self, other):
 
         X_other = self.scaler.transform(other.X_train)
-        y_hat = self.clf.predict(X_other)
-        y_score = self.clf.decision_function(X_other)
+        y_hat = self.cls.predict(X_other)
+        y_score = self.cls.decision_function(X_other)
 
         return Scorer().get_scores(
             other.y_train, y_hat, y_score, times=other.times_train
@@ -190,9 +194,13 @@ class BLClassifier:
 
         # Train & Score SVMs:
         if self.cls_method == "SVM":
-            self.cls = SVC(class_weight="balanced")#.fit(X_train_bal, y_train_bal)
-            params = {'C':[0.1,1,10,100]}
-            self.cls = RandomizedSearchCV(self.cls,params,n_iter=4).fit(X_train_bal, y_train_bal)
+            self.cls = SVC(class_weight="balanced")  # .fit(X_train_bal, y_train_bal)
+            # self.cls = SVC(class_weight="balanced").fit(X_train_bal, y_train_bal)
+            params = {"C": [0.001, 0.005, 0.1, 0.5, 1, 10, 100]}
+            self.cls = RandomizedSearchCV(self.cls, params, n_iter=7).fit(
+                X_train_bal, y_train_bal
+            )
+
             def get_losses(X):
                 return None
 
@@ -233,6 +241,7 @@ class BLClassifier:
             times=self.times_valid,
             losses=get_losses(X_valid_sc),
         )
+
         # self.linearSVM = LinearSVC().fit(X_train_bal, y_train_bal)
         self.linearSVM = SVC(kernel="linear").fit(X_train_bal, y_train_bal)
         self.SVM_coefs = pd.Series(

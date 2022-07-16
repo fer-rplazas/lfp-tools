@@ -25,7 +25,7 @@ class ResNetMini(nn.Module):
         num_classes=2,
         ks=89,
         num_blocks=[1],
-        c_hidden=[8, 16, 32],
+        c_hidden=[75,128,256],#[8, 16, 32],
         act_fn_name="silu",
     ):
         super().__init__()
@@ -93,6 +93,11 @@ class ResNetMini(nn.Module):
         x = self.out_norm(x)
 
         return self.cls(x)
+
+    def embed(self, x):
+        x = self.input_net(x)
+        x = self.blocks(x)
+        return self.out_norm(x)
 
 
 class ResNet(nn.Module):
