@@ -548,6 +548,9 @@ class EMGData(SignalBundle):
 class LFPData(SignalBundle):
     """LFP data"""
 
+    def __init__(self, *kargs, **kwargs):
+        self.super().__init__(*kargs, **kwargs)
+
     @classmethod
     def from_importer(cls, importer, names):
         data = importer.data[[importer.ch_dict[name] for name in names], :]
@@ -563,6 +566,87 @@ class LFPData(SignalBundle):
             lfp_data = np.delete(lfp_data, drop_channels, 0)
 
         return cls(lfp_data, highpassed=True)
+
+
+FULL_DIRECTIONAL_NAMES = ["L0", "L1A", "L1B", "L1C", "L2A", "L2B", "L2C", "L3"] + [
+    "R0",
+    "R1A",
+    "R1B",
+    "R1C",
+    "R2A",
+    "R2B",
+    "R2C",
+    "R3",
+]
+FULL_DIRECTIONAL_BIPOLARS = [
+    ("L0_1A", (0, 1)),
+    ("L0_1B", (0, 2)),
+    ("L0_1C", (0, 3)),
+    ("L1A_2A", (1, 4)),
+    ("L1B_2B", (2, 5)),
+    ("L1C_2C", (3, 6)),
+    ("L2A_3", (4, 7)),
+    ("L2B_3", (5, 7)),
+    ("L2C_3", (6, 7)),
+] + [
+    ("R0_1A", (8, 9)),
+    ("R0_1B", (8, 10)),
+    ("R0_1C", (8, 11)),
+    ("R1A_2A", (9, 12)),
+    ("R1B_2B", (10, 13)),
+    ("R1C_2C", (11, 14)),
+    ("R2A_3", (12, 15)),
+    ("R2B_3", (13, 15)),
+    ("R2C_3", (14, 15)),
+]
+
+
+class BipolarContructor:
+    """
+    ['L0',{'L1A','L1B','L1C'},{'L2A','L2B','L2C'},'L3']+[R equivalents]
+    """
+
+    def __init__(self, names, lead_type="directional"):
+        self.lead_type = lead_type
+        self.names = names
+
+        if self.lead_type == "directional":
+            self.full_names = FULL_DIRECTIONAL_NAMES
+            self.full_bips = FULL_DIRECTIONAL_BIPOLARS
+
+        self.missing = [el for el in self.full_names if el not in self.names]
+        self.missing_idx = [self.full_names.index(el) for el in self.missing]
+
+        self.mapping_vals = list(range(len(self.full_names)))
+
+        for missing_id in self.missing_idx:
+            self.mapping_vals[missing_id:] = [
+                el - 1 for el in self.mapping_vals[missing_id:]
+            ]
+            self.mapping_vals[missing_id] = -1
+
+        self.mapping_dict = {
+            k: v for k, v in zip(list(range(len(self.full_names))), self.mapping_vals)
+        }
+
+        self.mapper = [
+            (el[0], (self.mapping_dict[el[1][0]], self.mapping_dict[el[1][1]]))
+            for el in self.full_bips
+        ]
+
+        self.mapper = [el for el in self.mapper if el[1][0] != -1 and el[1][1] != -1]
+
+        self.out_names = [el[0] for el in self.mapper]
+        self.ch_mapper = [el[1] for el in self.mapper]
+
+    def form_bipolar(self, x: np.ndarray) -> np.ndarray:
+
+        out = np.zeros((len(self.ch_mapper), x.shape[-1]))
+
+        for jj, (ch0, ch1) in enumerate(self.ch_mapper):
+            out[jj] = x[ch1] - x[ch0]
+
+        return out
 
 
 class Label(SignalBundle):
