@@ -1,4 +1,7 @@
 from functools import partial
+import os
+from typing import Union
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -52,8 +55,7 @@ def rebalance_data(X, y):
 
 @njit
 def window_data(data, idx_start, idx_end):
-    """Turns data of shape (n_chans, n_samples) into data of shape (n_windows, n_chans, n_samples_per_window)
-    """
+    """Turns data of shape (n_chans, n_samples) into data of shape (n_windows, n_chans, n_samples_per_window) using the starting and end indices of each window"""
 
     assert np.all(
         (idx_end - idx_start) == idx_end[0] - idx_start[0]

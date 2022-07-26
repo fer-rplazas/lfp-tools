@@ -2,3 +2,4 @@
 **/*.cpython-39.pyc
 *.egg-info/
 **/__pycache__/**
+.vscode/
