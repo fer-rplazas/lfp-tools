@@ -184,18 +184,14 @@ class BLClassifier:
         X_valid_sc = self.scaler.transform(self.X_valid)
 
         # Rebalance training data for equal number of samples in each class:
-        X_train_bal, y_train_bal = rebalance_data(X_train_sc, self.y_train)
-        # X_train_bal, y_train_bal = X_train_sc, self.y_train
-
-        # Balance validation data:
-        # X_valid_bal, y_valid_bal = RandomUnderSampler().fit_resample(
-        #     X_valid_sc, self.y_valid
-        # )
+        # X_train_bal, y_train_bal = rebalance_data(X_train_sc, self.y_train)
+        X_train_bal, y_train_bal = X_train_sc, self.y_train
 
         # Train & Score SVMs:
         if self.cls_method == "SVM":
-            self.cls = SVC(class_weight="balanced")  # .fit(X_train_bal, y_train_bal)
-            # self.cls = SVC(class_weight="balanced").fit(X_train_bal, y_train_bal)
+            self.cls = SVC(class_weight="balanced")
+
+            # Run HParam Optimization:
             params = {"C": [0.001, 0.005, 0.1, 0.5, 1, 10, 100]}
             self.cls = RandomizedSearchCV(self.cls, params, n_iter=7).fit(
                 X_train_bal, y_train_bal
