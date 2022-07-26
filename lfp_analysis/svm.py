@@ -165,6 +165,17 @@ class BLClassifier:
             other.y_train, y_hat, y_score, times=other.times_train
         )
 
+    def to_disk(self, fname: Union[str, os.PathLike]):
+
+        data = {
+            "cls": self.cls,
+            "scaler": self.scaler,
+            "feat_extractor": self.extractor,
+        }
+
+        joblib.dump(data, fname)
+
+
     def classify(
         self,
         cls_method="SVM",
