@@ -95,7 +95,7 @@ class ARConvs(nn.Module):
         self.convs = create_model(convs_name, convs_hparams)
         self.decoder = Decoder(**decoder_hparams)
 
-    def forward(self, x, decode_feats=True):
+    def forward(self, x, decode_feats=True ):
 
         # Encode:
         ## Encode convs:
@@ -106,7 +106,7 @@ class ARConvs(nn.Module):
         x_conved = torch.stack(l_)
 
         ## Encode Auto-Regressive
-        lstm_out = self.LSTM(x_conved)[0]
+        lstm_out, (h,c) = self.LSTM(x_conved)
 
         # Decode:
         if decode_feats:
@@ -117,6 +117,30 @@ class ARConvs(nn.Module):
         out_class = out_class.squeeze()
 
         return out_class, out_regress
+
+    def forward_realtime(self,x,state=None):
+        
+        # Encode:
+        ## Encode convs:
+        l_ = []
+        for x_ in torch.unbind(x, 1):
+            l_.append(self.convs(x_))
+
+        x_conved = torch.stack(l_)
+
+        ## Encode Auto-Regressive
+        if state is None:
+            lstm_out, (h,c) = self.LSTM(x_conved)
+        else:
+            lstm_out, (h,c) = self.LSTM(x_conved,state[0],state[1])
+            
+
+        # Decode:
+        out_class = self.decoder(lstm_out, [], regress_feats=False)
+        out_class = out_class.squeeze()
+        
+        return out_class, (h,c)
+
 
 
 model_dict["ARConvs"] = ARConvs
