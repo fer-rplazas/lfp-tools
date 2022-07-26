@@ -578,6 +578,17 @@ FULL_DIRECTIONAL_NAMES = ["L0", "L1A", "L1B", "L1C", "L2A", "L2B", "L2C", "L3"] 
     "R2C",
     "R3",
 ]
+
+FULL_DIRECTIONAL_NAMES = ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"] + [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+]
 FULL_DIRECTIONAL_BIPOLARS = [
     ("L0_1A", (0, 1)),
     ("L0_1B", (0, 2)),
