@@ -3,7 +3,7 @@ from .dense import DenseNetFull
 from .lstm import FeatureCombiner
 import torch
 from torch import nn
-from ..feature_extractor import RealTimePeriodogram
+from ..feature_extractor import SignalFeatureExtractor
 
 
 
@@ -20,7 +20,7 @@ class Reducer(torch.nn.Module):
         super().__init__()
 
         self.net = create_model(model_name, model_hparams)
-        self.feat_extractor = RealTimePeriodogram(1535)
+        self.feat_extractor = SignalFeatureExtractor().prepare_realtime(1535).realtime_feats
         self.convs = FeatureCombiner(self.net, self.feat_extractor, n_in)
 
         n_feats = self.convs(torch.randn(2, n_in, sig_len)).shape[-1]
