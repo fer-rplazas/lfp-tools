@@ -97,10 +97,14 @@ class DataModule(pl.LightningDataModule):
             self.valid_data.append((x, y))
 
     def train_dataloader(self):
-        return DataLoader(self.train_data, batch_size=self.bs, shuffle=True)
+        return DataLoader(
+            self.train_data, batch_size=self.bs, shuffle=True, drop_last=True
+        )
 
     def valid_dataloader(self):
-        return DataLoader(self.valid_data, batch_size=self.bs, shuffle=False)
+        return DataLoader(
+            self.valid_data, batch_size=self.bs, shuffle=False, drop_last=True
+        )
 
 
 class ARModule(pl.LightningModule):
