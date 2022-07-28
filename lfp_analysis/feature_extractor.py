@@ -121,13 +121,11 @@ def periodogram_extractor(feat_mat, data, freq_ranges, fs=2048.0):
 
     # Compute periodogram:
     for ii, this_data in enumerate(data):
-        f, Pxx = periodogram(
-            this_data,
-            fs=fs,
-        )
+        f, Pxx = periodogram(this_data, fs=fs,)
         feat_mat = fill_feat_mat(feat_mat, ii, Pxx, data.shape[1], freq_idx)
 
     return feat_mat
+
 
 def hilbert_extractor(feat_mat, data, freq_ranges, idx_start, idx_end, fs=2048.0):
     # Allocate:
@@ -201,21 +199,16 @@ class SignalFeatureExtractor(FeatureExtractor):
         for jj, freq_range in enumerate(self.freq_ranges):
             for kk in range(2):
                 self.freq_idx[jj, kk] = np.argmin(np.abs(freq_range[kk] - f))
-        
+
         return self
 
     def realtime_feats(self, data: np.ndarray) -> np.ndarray:
 
-        feat_mat = (
-            np.zeros((data.shape[0], data.shape[1] * self.freq_idx.shape[0])) * np.nan
-        )
-        for ii, this_data in enumerate(data):
-            _, Pxx = periodogram(
-                this_data,
-                fs=self.fs,
-            )
-            # import pdb; pdb.set_trace()
-            feat_mat = fill_feat_mat(feat_mat, ii, Pxx, data.shape[1], self.freq_idx)
+        feat_mat = np.zeros((1, data.shape[0] * self.freq_idx.shape[0])) * np.nan
+
+        _,Pxx = periodogram(data, fs=self.fs,)
+
+        feat_mat = fill_feat_mat(feat_mat, 0, Pxx, data.shape[0], self.freq_idx)
 
         assert np.isnan(feat_mat).any() == False, "NaNs found after feature extraction"
 

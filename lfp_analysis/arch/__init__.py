@@ -132,7 +132,7 @@ class ARConvs(nn.Module):
         if state is None:
             lstm_out, (h,c) = self.LSTM(x_conved)
         else:
-            lstm_out, (h,c) = self.LSTM(x_conved,state[0],state[1])
+            lstm_out, (h,c) = self.LSTM(x_conved,state)
             
 
         # Decode:
