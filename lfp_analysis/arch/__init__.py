@@ -6,8 +6,6 @@ from torch import nn
 from ..feature_extractor import SignalFeatureExtractor
 
 
-
-
 class Reducer(torch.nn.Module):
     def __init__(
         self,
@@ -20,7 +18,9 @@ class Reducer(torch.nn.Module):
         super().__init__()
 
         self.net = create_model(model_name, model_hparams)
-        self.feat_extractor = SignalFeatureExtractor().prepare_realtime(1535).realtime_feats
+        self.feat_extractor = (
+            SignalFeatureExtractor().prepare_realtime(1535).realtime_feats
+        )
         self.convs = FeatureCombiner(self.net, self.feat_extractor, n_in)
 
         n_feats = self.convs(torch.randn(2, n_in, sig_len)).shape[-1]
@@ -57,14 +57,19 @@ class Decoder(nn.Module):
         super().__init__()
 
         self.d1 = nn.Sequential(
+            nn.BatchNorm1d(n_ins[0]),
             nn.Linear(n_ins[0], n_ins[0] * 3),
             nn.BatchNorm1d(n_ins[0] * 3),
             nn.SiLU(),
+            nn.Linear(n_ins[0] * 3, n_ins[0] * 9),
+            nn.BatchNorm1d(n_ins[0] * 9),
+            nn.SiLU(),
             nn.Dropout(p_drop),
-            nn.Linear(n_ins[0] * 3, n_outs[0]),
+            nn.Linear(n_ins[0] * 9, n_outs[0]),
         )
 
         self.d2 = nn.Sequential(
+            nn.BatchNorm1d(n_ins[1]),
             nn.Linear(n_ins[1], n_ins[1] * 2),
             nn.BatchNorm1d(n_ins[1] * 2),
             nn.SiLU(),
@@ -86,7 +91,12 @@ class Decoder(nn.Module):
 
 class ARConvs(nn.Module):
     def __init__(
-        self, n_feats, hidden_size, convs_name, convs_hparams, decoder_hparams
+        self,
+        n_feats: int,
+        hidden_size: int,
+        convs_name: str,
+        convs_hparams: dict,
+        decoder_hparams: dict,
     ):
         super().__init__()
 
@@ -95,8 +105,9 @@ class ARConvs(nn.Module):
         self.convs = create_model(convs_name, convs_hparams)
         self.decoder = Decoder(**decoder_hparams)
 
-    def forward(self, x, decode_feats=True ):
+    def forward(self, x, decode_feats=True):
 
+        x, feats = x
         # Encode:
         ## Encode convs:
         l_ = []
@@ -106,7 +117,9 @@ class ARConvs(nn.Module):
         x_conved = torch.stack(l_)
 
         ## Encode Auto-Regressive
-        lstm_out, (h,c) = self.LSTM(x_conved)
+        x_ar = torch.cat((x_conved, feats), -1)
+
+        lstm_out, (h, c) = self.LSTM(x_ar)
 
         # Decode:
         if decode_feats:
@@ -118,8 +131,9 @@ class ARConvs(nn.Module):
 
         return out_class, out_regress
 
-    def forward_realtime(self,x,state=None):
-        
+    def forward_realtime(self, x, state=None):
+
+        x, feats = x
         # Encode:
         ## Encode convs:
         l_ = []
@@ -128,19 +142,19 @@ class ARConvs(nn.Module):
 
         x_conved = torch.stack(l_)
 
+        x_ar = torch.cat((x_conved, feats), -1)
+
         ## Encode Auto-Regressive
         if state is None:
-            lstm_out, (h,c) = self.LSTM(x_conved)
+            lstm_out, (h, c) = self.LSTM(x_ar)
         else:
-            lstm_out, (h,c) = self.LSTM(x_conved,state)
-            
+            lstm_out, (h, c) = self.LSTM(x_ar, state)
 
         # Decode:
         out_class = self.decoder(lstm_out, [], regress_feats=False)
         out_class = out_class.squeeze()
-        
-        return out_class, (h,c)
 
+        return out_class, (h, c)
 
 
 model_dict["ARConvs"] = ARConvs

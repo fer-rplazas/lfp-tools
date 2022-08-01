@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.optim as optim
 
 import numpy as np
+import pandas as pd
+
+from mrmr import mrmr_classif
 
 # from torchaudio.transforms import Resample
 
@@ -59,7 +62,13 @@ class DataModule(pl.LightningDataModule):
         )
         self.bs = bs
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(
+        self,
+        stage: Optional[str] = None,
+        feat_selection: Optional[list[int]] = None,
+        means: Optional[np.ndarray] = None,
+        stds: Optional[np.ndarray] = None,
+    ):
 
         # Window data, extract features:
         self.windowed = window_data(
@@ -68,9 +77,35 @@ class DataModule(pl.LightningDataModule):
             self.windower.windower_.df.id_end.values,
         )
         self.features = self.feature_extractor(self.windowed)
-        self.features = (
-            self.features - self.features.mean(axis=0, keepdims=True)
-        ) / self.features.std(axis=0, keepdims=True)
+        if means is None:
+            self.mean = self.features[
+                self.windower.windower_.df["is_valid"] == False, :
+            ].mean(axis=0, keepdims=True)
+        else:
+            self.mean = means
+        if stds is None:
+            self.std = self.features[
+                self.windower.windower_.df["is_valid"] == False, :
+            ].std(axis=0, keepdims=True)
+        else:
+            self.std = stds
+        self.features = (self.features - self.mean) / self.std
+
+        X_train = self.features[self.windower.windower_.df["is_valid"] == False, :]
+        y_train = self.windower.windower_.df[
+            self.windower.windower_.df["is_valid"] == False
+        ]["label"].values
+
+        if feat_selection is None:
+            feat_selection = mrmr_classif(
+                X=pd.DataFrame(X_train), y=pd.DataFrame(y_train), K=24
+            )
+
+        self.features = self.features[:, feat_selection]
+
+        # self.features = (
+        #     self.features - self.features.mean(axis=0, keepdims=True)
+        # ) / self.features.std(axis=0, keepdims=True)
 
         self.data = torch.tensor(self.windowed).float()
 
@@ -156,14 +191,18 @@ class ARModule(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, _):
 
         x, labels = batch
 
         cats = torch.cat([lab[0] for lab in labels]).float()
-        feats = torch.stack([lab[1] for lab in labels]).view(-1, labels[0][1].shape[-1])
+        feats = torch.stack(
+            [lab[1] for lab in labels]
+        )  # .view(-1, labels[0][1].shape[-1])
 
-        l1, l2 = self.model(x)
+        l1, l2 = self.model((x, feats))
+
+        feats = feats.view(-1, labels[0][1].shape[-1])
 
         if self.use_mixup:
 
@@ -216,15 +255,18 @@ class ARModule(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, _):
 
         x, labels = batch
 
         cats = torch.cat([lab[0] for lab in labels]).float()
-        feats = torch.stack([lab[1] for lab in labels]).view(-1, labels[0][1].shape[-1])
+        feats = torch.stack(
+            [lab[1] for lab in labels]
+        )  # .view(-1, labels[0][1].shape[-1])
 
-        l1, l2 = self.model(x)
+        l1, l2 = self.model((x, feats))
 
+        feats = feats.view(-1, labels[0][1].shape[-1])
         cat_loss = self.l_cat(l1, cats)
         regress_loss = self.l_regress(l2, feats)
         loss = self.w_losses[0] * cat_loss + self.w_losses[1] * regress_loss

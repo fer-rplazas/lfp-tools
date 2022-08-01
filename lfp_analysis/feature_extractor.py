@@ -100,7 +100,9 @@ class TfFeatureExtractor(FeatureExtractor):
 
 
 @njit
-def fill_feat_mat(feat_mat, win_id, Pxx, n_chan, freq_idx):
+def fill_feat_mat(
+    feat_mat: np.ndarray, win_id: int, Pxx: np.ndarray, n_chan: int, freq_idx: list
+):
 
     for ch in range(n_chan):
         for kk, freq_lims in enumerate(freq_idx):
@@ -121,7 +123,10 @@ def periodogram_extractor(feat_mat, data, freq_ranges, fs=2048.0):
 
     # Compute periodogram:
     for ii, this_data in enumerate(data):
-        f, Pxx = periodogram(this_data, fs=fs,)
+        f, Pxx = periodogram(
+            this_data,
+            fs=fs,
+        )
         feat_mat = fill_feat_mat(feat_mat, ii, Pxx, data.shape[1], freq_idx)
 
     return feat_mat
@@ -204,12 +209,27 @@ class SignalFeatureExtractor(FeatureExtractor):
 
     def realtime_feats(self, data: np.ndarray) -> np.ndarray:
 
-        feat_mat = np.zeros((1, data.shape[0] * self.freq_idx.shape[0])) * np.nan
+        if data.ndim < 3:  # TODO: simply .unsqueeze(0)
+            data = data[np.newaxis, ...]
 
-        _,Pxx = periodogram(data, fs=self.fs,)
+        feat_mat = (
+            np.zeros((data.shape[0], data.shape[1] * self.freq_idx.shape[0])) * np.nan
+        )
+        f, _ = periodogram(np.random.rand((data.shape[2])), fs=self.fs)
 
-        feat_mat = fill_feat_mat(feat_mat, 0, Pxx, data.shape[0], self.freq_idx)
+        freq_idx = np.zeros_like(np.array(self.freq_ranges))
+        for jj, freq_range in enumerate(self.freq_ranges):
+            for kk in range(2):
+                freq_idx[jj, kk] = np.argmin(np.abs(freq_range[kk] - f))
+
+        # Compute periodogram:
+        for ii, this_data in enumerate(data):
+            f, Pxx = periodogram(
+                this_data,
+                fs=self.fs,
+            )
+            feat_mat = fill_feat_mat(feat_mat, ii, Pxx, data.shape[1], freq_idx)
 
         assert np.isnan(feat_mat).any() == False, "NaNs found after feature extraction"
 
-        return feat_mat
+        return feat_mat.squeeze()

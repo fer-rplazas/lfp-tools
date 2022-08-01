@@ -24,6 +24,8 @@ from sklearn.svm import SVC, LinearSVC
 from .feature_extractor import SignalFeatureExtractor, TfFeatureExtractor
 from .score import Scorer, SvmScores
 
+from mrmr import mrmr_classif
+
 from numba import njit
 
 scalar_metric_func_container = {
@@ -173,10 +175,10 @@ class BLClassifier:
             "cls": self.cls,
             "scaler": self.scaler,
             "feat_extractor": self.extractor,
+            "feat_selection": self.feat_selection,
         }
 
         joblib.dump(data, fname)
-
 
     def classify(
         self,
@@ -199,6 +201,13 @@ class BLClassifier:
         # Rebalance training data for equal number of samples in each class:
         # X_train_bal, y_train_bal = rebalance_data(X_train_sc, self.y_train)
         X_train_bal, y_train_bal = X_train_sc, self.y_train
+
+        feat_selection = mrmr_classif(
+            pd.DataFrame(X_train_bal), pd.DataFrame(y_train_bal), K=24
+        )
+        self.feat_selection = feat_selection
+        X_train_bal = X_train_bal[:, feat_selection]
+        X_valid_sc = X_valid_sc[:, feat_selection]
 
         # Train & Score SVMs:
         if self.cls_method == "SVM":
@@ -223,8 +232,8 @@ class BLClassifier:
             raise ValueError("cls_method not recognized, should be LDA or SVM")
 
         # Performance on Train:
-        self.y_pred_train = self.cls.predict(X_train_sc)
-        self.y_score_train = self.cls.decision_function(X_train_sc)
+        self.y_pred_train = self.cls.predict(X_train_bal)
+        self.y_score_train = self.cls.decision_function(X_train_bal)
 
         self.times_train = self.df[self.df["is_valid"] == False]["t"].values
         self.train_scores = Scorer(
@@ -234,7 +243,7 @@ class BLClassifier:
             self.y_pred_train,
             self.y_score_train,
             times=self.times_train,
-            losses=get_losses(X_train_sc),
+            losses=get_losses(X_train_bal),
         )
 
         # Performance on Valid:
@@ -254,7 +263,7 @@ class BLClassifier:
         # self.linearSVM = LinearSVC().fit(X_train_bal, y_train_bal)
         self.linearSVM = SVC(kernel="linear").fit(X_train_bal, y_train_bal)
         self.SVM_coefs = pd.Series(
-            self.linearSVM.coef_.squeeze(), index=list(self.X.columns)
+            self.linearSVM.coef_.squeeze(), index=list(self.X.columns[feat_selection])
         )
         self.linearSVM_acc = self.linearSVM.score(X_valid_sc, self.y_valid)
 
@@ -309,7 +318,7 @@ class BLClassifier:
         self.svm_coef_df = pd.DataFrame(
             np.c_[(svm_coefs_mean, svm_coefs_std)],
             columns=["mean", "std"],
-            index=list(self.X.columns),
+            index=list(self.X.columns[self.feat_selection]),
         )
         self.lin_svm_acc = np.mean(np.array(lin_svm_acc_cont)), np.std(
             np.array(lin_svm_acc_cont)

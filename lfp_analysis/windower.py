@@ -224,6 +224,7 @@ class Windower:
 
         return new_windower
 
+
 class WindowerSeq:
     def __init__(
         self,
@@ -270,7 +271,7 @@ class WindowerSeq:
         is_valid_cont = []
         t_cont = []
 
-        for jj in range(0,len(self.windower_.df) - self.seq_len,5):
+        for jj in range(0, len(self.windower_.df) - self.seq_len, 2):
             row = self.windower_.df.iloc[jj]
             # Check whether
             if row["is_valid"] != self.windower_.df.iloc[jj + self.seq_len]["is_valid"]:
