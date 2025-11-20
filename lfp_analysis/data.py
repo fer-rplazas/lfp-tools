@@ -159,6 +159,8 @@ class Dataset:
             to_drop = consolidate_chan_dict[self.pat_id][self.task][self.stim]
             if to_drop is not None:
                 to_drop = list(to_drop) if not isinstance(to_drop, list) else to_drop
+        else:
+            to_drop = []
 
         self.LFP = LFPData.from_h5(self.LFP_PATH, key="LFP", drop_channels=to_drop)
 
@@ -207,6 +209,12 @@ class Dataset:
         return ax
 
 
+class BipolarContructor:
+
+    def __init__(self):
+        pass
+
+
 class SmrImporter:
     """Reads signals and metadata (sampling frequency ``fs``, channel names ``ch_names``) from SMR file"""
 
@@ -222,9 +230,11 @@ class SmrImporter:
         self.fs = analog_signal.sampling_rate.magnitude
 
         self.data = analog_signal.magnitude.T
-        
+
     def t(self):
-        return np.linspace(0,(self.data.shape[-1]-1.0)/self.fs,self.data.shape[-1])
+        return np.linspace(
+            0, (self.data.shape[-1] - 1.0) / self.fs, self.data.shape[-1]
+        )
 
     def free(self):
         if hasattr(self, "data"):
@@ -270,9 +280,12 @@ class SignalBundle:
         """
         return dedent(reprStr)
 
+    def __getitem__(self, idx):
+        return self.data[self.names.index(idx)]
+
     def highpass(self, cutoff_freq: float = 0.5):
 
-        if not self.data.size>0:
+        if not self.data.size > 0:
             return self
         if self.highpassed:
             raise Warning(
@@ -358,12 +371,12 @@ class SignalBundle:
     def t(self):
         return np.linspace(0, self.data.shape[-1] / self.fs, self.data.shape[-1])
 
-    def notch(self,**kwargs):
+    def notch(self, **kwargs):
 
-        if not self.data.size>0:
+        if not self.data.size > 0:
             return self
-        
-        self.data = notch_filter_data(self.data,**kwargs)
+
+        self.data = notch_filter_data(self.data, **kwargs)
 
         return self
 
@@ -405,11 +418,9 @@ class AccData(SignalBundle):
         return cls(data, acc_names, importer.fs)
 
     def to_magnitude(self):
-        if self.data.shape[1] == 6:
+        if self.data.shape[0] == 6:
             self.data = np.linalg.norm(self.data[:3,], axis=0) + np.linalg.norm(
-                self.data[
-                    3:,
-                ],
+                self.data[3:,],
                 axis=0,
             )
         else:
